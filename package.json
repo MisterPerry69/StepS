@@ -1,0 +1,10 @@
+{
+  "name": "steps",
+  "version": "1.0.0",
+  "description": "StepS — scompone i progetti in tutti i passi (PWA blueprint, backend GAS+Gemini)",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node engine.test.js"
+  },
+  "private": true
+}

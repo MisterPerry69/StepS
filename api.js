@@ -1,0 +1,41 @@
+// StepS — client verso il Google Apps Script. Unico punto che fa fetch.
+(function () {
+  "use strict";
+
+  async function call(action, payload) {
+    const url = window.CONFIG && window.CONFIG.GAS_URL;
+    if (!url || url.indexOf("INCOLLA") === 0) {
+      throw new Error("CONFIG.GAS_URL non impostato. Vedi gas/SETUP.md.");
+    }
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        // text/plain evita la preflight CORS con i Web App GAS
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: action, payload: payload || {} })
+      });
+    } catch (e) {
+      throw new Error("Nessuna connessione al server.");
+    }
+    let json;
+    try { json = await res.json(); }
+    catch (e) { throw new Error("Risposta non valida dal server."); }
+    if (!json || json.ok !== true) {
+      throw new Error((json && json.error) || "Errore sconosciuto dal server.");
+    }
+    return json.data;
+  }
+
+  window.API = {
+    listProjects: function () { return call("listProjects"); },
+    getPlan: function (projectId) { return call("getPlan", { projectId: projectId }); },
+    generateQuestions: function (description) { return call("generateQuestions", { description: description }); },
+    generatePlan: function (description, qa) { return call("generatePlan", { description: description, qa: qa }); },
+    decomposeStep: function (projectId, stepId, stepText) { return call("decomposeStep", { projectId: projectId, stepId: stepId, stepText: stepText }); },
+    saveProject: function (project) { return call("saveProject", { project: project }); },
+    saveStep: function (step) { return call("saveStep", { step: step }); },
+    deleteStep: function (stepId) { return call("deleteStep", { stepId: stepId }); },
+    toggleStep: function (stepId, done) { return call("toggleStep", { stepId: stepId, done: done }); }
+  };
+})();

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#1466c4">
+<title>StepS</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="bp">
+<div class="phone">
+
+  <!-- HOME -->
+  <section id="view-home">
+    <header class="topbar">
+      <div class="brand">STEPS</div>
+      <div class="brand-sub" id="home-count">— progetti</div>
+    </header>
+    <div id="proj-list"></div>
+    <button class="fab" id="btn-new">+ NUOVO PROGETTO</button>
+  </section>
+
+  <!-- CREAZIONE -->
+  <section id="view-create" class="hidden">
+    <header class="topbar">
+      <button class="link" id="create-back">‹ INDIETRO</button>
+      <div class="brand-sub" id="create-step-label">DESCRIVI</div>
+    </header>
+    <div id="create-body"></div>
+  </section>
+
+  <!-- PIANO -->
+  <section id="view-plan" class="hidden">
+    <header class="topbar">
+      <button class="link" id="plan-back">‹ INDIETRO</button>
+      <div class="brand-sub" id="plan-pct">—%</div>
+    </header>
+    <div id="plan-body"></div>
+  </section>
+
+  <!-- TOAST / ERRORI -->
+  <div id="toast" class="toast hidden"></div>
+
+</div>
+<script src="config.js"></script>
+<script src="engine.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
