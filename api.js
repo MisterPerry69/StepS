@@ -28,6 +28,7 @@
   }
 
   window.API = {
+    getAll: function () { return call("getAll"); },
     listProjects: function () { return call("listProjects"); },
     getProject: function (projectId) { return call("getProject", { projectId: projectId }); },
     saveProject: function (project) { return call("saveProject", { project: project }); },

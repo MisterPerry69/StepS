@@ -1,5 +1,5 @@
 // Projekt — service worker minimale: precache del guscio statico.
-var CACHE = "projekt-v2";
+var CACHE = "projekt-v3";
 var SHELL = ["./", "./index.html", "./style.css", "./engine.js",
   "./api.js", "./app.js", "./config.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png"];
