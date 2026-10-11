@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#1466c4">
-<title>StepS</title>
+<title>Projekt</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,30 +18,33 @@
   <!-- HOME -->
   <section id="view-home">
     <header class="topbar">
-      <div class="brand">STEPS</div>
+      <div class="brand">PROJEKT</div>
       <div class="brand-sub" id="home-count">— progetti</div>
     </header>
     <div id="proj-list"></div>
     <button class="fab" id="btn-new">+ NUOVO PROGETTO</button>
   </section>
 
-  <!-- CREAZIONE -->
-  <section id="view-create" class="hidden">
+  <!-- PROGETTO -->
+  <section id="view-project" class="hidden">
     <header class="topbar">
-      <button class="link" id="create-back">‹ INDIETRO</button>
-      <div class="brand-sub" id="create-step-label">DESCRIVI</div>
+      <button class="link" id="proj-back">‹ INDIETRO</button>
+      <button class="link" id="proj-menu">⋯ OPZIONI</button>
     </header>
-    <div id="create-body"></div>
+    <div id="proj-body"></div>
+    <form id="add-form" class="add-form">
+      <input type="text" id="add-input" placeholder="+ aggiungi cosa da fare…" autocomplete="off" enterkeyhint="done">
+    </form>
   </section>
 
-  <!-- PIANO -->
-  <section id="view-plan" class="hidden">
-    <header class="topbar">
-      <button class="link" id="plan-back">‹ INDIETRO</button>
-      <div class="brand-sub" id="plan-pct">—%</div>
-    </header>
-    <div id="plan-body"></div>
-  </section>
+  <!-- MENU AZIONI (bottom sheet) -->
+  <div id="sheet" class="sheet-wrap hidden">
+    <div class="sheet-bg" id="sheet-bg"></div>
+    <div class="sheet">
+      <div class="sheet-title" id="sheet-title"></div>
+      <div id="sheet-actions"></div>
+    </div>
+  </div>
 
   <!-- TOAST / ERRORI -->
   <div id="toast" class="toast hidden"></div>

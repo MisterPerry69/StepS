@@ -1,4 +1,4 @@
-// StepS — client verso il Google Apps Script. Unico punto che fa fetch.
+// Projekt — client verso il Google Apps Script. Unico punto che fa fetch.
 (function () {
   "use strict";
 
@@ -29,12 +29,11 @@
 
   window.API = {
     listProjects: function () { return call("listProjects"); },
-    getPlan: function (projectId) { return call("getPlan", { projectId: projectId }); },
-    generateQuestions: function (description) { return call("generateQuestions", { description: description }); },
-    generatePlan: function (description, qa) { return call("generatePlan", { description: description, qa: qa }); },
-    decomposeStep: function (projectId, stepId, stepText) { return call("decomposeStep", { projectId: projectId, stepId: stepId, stepText: stepText }); },
+    getProject: function (projectId) { return call("getProject", { projectId: projectId }); },
     saveProject: function (project) { return call("saveProject", { project: project }); },
-    saveStep: function (step) { return call("saveStep", { step: step }); },
+    deleteProject: function (projectId) { return call("deleteProject", { projectId: projectId }); },
+    saveStep: function (step) { return call("saveSteps", { steps: [step] }); },
+    saveSteps: function (steps) { return call("saveSteps", { steps: steps }); },
     deleteStep: function (stepId) { return call("deleteStep", { stepId: stepId }); },
     toggleStep: function (stepId, done) { return call("toggleStep", { stepId: stepId, done: done }); }
   };

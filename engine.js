@@ -1,5 +1,5 @@
 // ============================================================
-//  StepS — ENGINE
+//  Projekt — ENGINE
 //  Pura logica. Nessun DOM, nessun fetch, nessuna globale.
 //  Riceve array/oggetti, ritorna array/oggetti. Testabile in Node.
 // ============================================================
@@ -41,11 +41,43 @@
     return Math.max.apply(null, siblings.map(function (s) { return s.order || 0; })) + 1;
   }
 
-  function newId() {
-    return "s_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+  function newId(prefix) {
+    return (prefix || "s_") + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
   }
 
-  const API = { buildTree: buildTree, computeProgress: computeProgress, nextOrder: nextOrder, newId: newId };
+  // id dello step + tutti i suoi discendenti (per l'eliminazione a cascata).
+  function descendantIds(steps, id) {
+    const out = [String(id)];
+    for (let i = 0; i < out.length; i++) {
+      steps.forEach(function (s) {
+        if (String(s.parentId || "") === out[i]) out.push(String(s.id));
+      });
+    }
+    return out;
+  }
+
+  // Sposta lo step di una posizione tra i fratelli (dir -1 su, +1 giu').
+  // Rinumera i fratelli 0..n-1 e ritorna SOLO le copie degli step il cui
+  // order e' cambiato (da salvare). Non modifica l'input.
+  function moveStep(steps, id, dir) {
+    const me = steps.filter(function (s) { return String(s.id) === String(id); })[0];
+    if (!me) return [];
+    const sibs = steps.filter(function (s) { return String(s.parentId || "") === String(me.parentId || ""); })
+      .slice().sort(byOrder);
+    const i = sibs.indexOf(me), j = i + dir;
+    if (j < 0 || j >= sibs.length) return [];
+    sibs[i] = sibs[j]; sibs[j] = me;
+    const changed = [];
+    sibs.forEach(function (s, k) {
+      if (Number(s.order || 0) !== k) changed.push(Object.assign({}, s, { order: k }));
+    });
+    return changed;
+  }
+
+  const API = {
+    buildTree: buildTree, computeProgress: computeProgress, nextOrder: nextOrder, newId: newId,
+    descendantIds: descendantIds, moveStep: moveStep
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = API;
   else root.Engine = API;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -1,7 +1,7 @@
 {
-  "name": "StepS",
-  "short_name": "StepS",
-  "description": "Scomponi i tuoi progetti in tutti i passi. Blueprint personale.",
+  "name": "Projekt",
+  "short_name": "Projekt",
+  "description": "Raccoglitore di progetti e delle cose da fare per completarli.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

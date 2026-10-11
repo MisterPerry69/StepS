@@ -1,13 +1,13 @@
-// StepS — orchestrazione UI (home, creazione guidata, piano).
+// Projekt — orchestrazione UI (home progetti, vista progetto con cose da fare).
 (function () {
   "use strict";
   var el = function (id) { return document.getElementById(id); };
-  var state = { projects: [], current: null, steps: [] };
-  var create = { description: "", questions: [], answers: [], qi: 0 };
+  var state = { projects: [], current: null, steps: [], showArchived: false };
+  var HIDE_KEY = "projekt.hideDone";
 
   // ---------- shell ----------
   function showView(id) {
-    ["view-home", "view-create", "view-plan"].forEach(function (v) {
+    ["view-home", "view-project"].forEach(function (v) {
       el(v).classList.toggle("hidden", v !== id);
     });
   }
@@ -17,10 +17,10 @@
     clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.add("hidden"); }, 3500);
   }
 
-  function tacche(pct, n) {
+  function tacche(pct, n, small) {
     n = n || 10;
     var full = Math.round((pct / 100) * n);
-    var html = '<div class="tacche">';
+    var html = '<div class="tacche' + (small ? ' small' : '') + '">';
     for (var i = 0; i < n; i++) html += '<div class="tacca' + (i < full ? ' on' : '') + '"></div>';
     return html + '</div>';
   }
@@ -31,193 +31,296 @@
     });
   }
 
-  function pad2(n) { n = String(n); return n.length < 2 ? "0" + n : n; }
+  function isDone(s) { return s.done === true || s.done === "true"; }
+  function pct(done, total) { return total ? Math.round((done / total) * 100) : 0; }
+
+  function getHideDone() { try { return localStorage.getItem(HIDE_KEY) === "1"; } catch (e) { return false; } }
+  function setHideDone(v) { try { localStorage.setItem(HIDE_KEY, v ? "1" : "0"); } catch (e) {} }
+
+  // ---------- menu azioni (bottom sheet) ----------
+  function openSheet(title, actions) {
+    el("sheet-title").textContent = title;
+    var box = el("sheet-actions");
+    box.innerHTML = "";
+    actions.forEach(function (a) {
+      var b = document.createElement("button");
+      b.className = "sheet-btn" + (a.danger ? " danger" : "");
+      b.textContent = a.label;
+      b.addEventListener("click", function () { closeSheet(); a.fn(); });
+      box.appendChild(b);
+    });
+    var c = document.createElement("button");
+    c.className = "sheet-btn ghost"; c.textContent = "ANNULLA";
+    c.addEventListener("click", closeSheet);
+    box.appendChild(c);
+    el("sheet").classList.remove("hidden");
+  }
+  function closeSheet() { el("sheet").classList.add("hidden"); }
 
   // ---------- HOME ----------
-  async function renderHome() {
+  function projectCard(p) {
+    var total = Number(p.total) || 0, done = Number(p.done) || 0, pc = pct(done, total);
+    var meta = total ? done + " DI " + total + " · " + pc + "%" : "VUOTO";
+    return '<div class="proj-card' + (p.status === "archived" ? ' archived' : '') + '" data-id="' + escapeHtml(p.id) + '">' +
+      '<div class="proj-emoji">' + escapeHtml(p.emoji || "📁") + '</div>' +
+      '<div class="proj-main"><div class="proj-title">' + escapeHtml(p.title) + '</div>' +
+      '<div class="proj-meta">' + meta + '</div>' + (total ? tacche(pc, 10, true) : '') + '</div></div>';
+  }
+
+  async function renderHome(reload) {
     showView("view-home");
     var list = el("proj-list");
-    list.innerHTML = '<div class="loading">CARICAMENTO…</div>';
-    try {
-      state.projects = await API.listProjects();
-    } catch (e) { list.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; return; }
-    el("home-count").textContent = state.projects.length + " progetti";
-    if (!state.projects.length) {
-      list.innerHTML = '<div class="empty">Nessun progetto.<br>Creane uno col pulsante qui sotto.</div>';
-      return;
+    if (reload !== false) {
+      list.innerHTML = '<div class="loading">CARICAMENTO…</div>';
+      try {
+        state.projects = await API.listProjects();
+      } catch (e) { list.innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; return; }
     }
-    list.innerHTML = state.projects.map(function (p) {
-      return '<div class="proj-card" data-id="' + escapeHtml(p.id) + '">' +
-        '<div class="proj-emoji">' + (p.emoji || "📈") + '</div>' +
-        '<div class="proj-main"><div class="proj-title">' + escapeHtml(p.title) + '</div>' +
-        '<div class="proj-meta">' + escapeHtml(String(p.status || "").toUpperCase()) + '</div></div></div>';
-    }).join("");
-    Array.prototype.forEach.call(list.querySelectorAll(".proj-card"), function (c) {
-      c.addEventListener("click", function () { openPlan(c.getAttribute("data-id")); });
+    // più recenti in cima
+    var sorted = state.projects.slice().sort(function (a, b) {
+      return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
     });
-  }
+    var active = sorted.filter(function (p) { return p.status !== "archived"; });
+    var archived = sorted.filter(function (p) { return p.status === "archived"; });
+    el("home-count").textContent = active.length + (active.length === 1 ? " progetto" : " progetti");
 
-  // ---------- CREAZIONE GUIDATA ----------
-  function startCreate() {
-    create = { description: "", questions: [], answers: [], qi: 0 };
-    showView("view-create");
-    el("create-step-label").textContent = "DESCRIVI";
-    el("create-body").innerHTML =
-      '<p class="qtext">Descrivi il progetto: cosa vuoi fare, a che punto sei, cosa hai già, cosa ti blocca.</p>' +
-      '<textarea id="desc" placeholder="Es. Sto facendo un muro di mattoni di polistirolo…"></textarea>' +
-      '<button class="btn" id="desc-next">AVANTI</button>';
-    el("desc-next").addEventListener("click", askQuestions);
-  }
-
-  async function askQuestions() {
-    var d = el("desc").value.trim();
-    if (d.length < 5) { toast("Scrivi qualche dettaglio in più."); return; }
-    create.description = d;
-    el("create-body").innerHTML = '<div class="loading">L’AI sta preparando le domande…</div>';
-    try {
-      var r = await API.generateQuestions(d);
-      create.questions = r.questions; create.answers = []; create.qi = 0;
-      renderQuestion();
-    } catch (e) {
-      el("create-body").innerHTML =
-        '<div class="empty">' + escapeHtml(e.message) + '</div>' +
-        '<button class="btn ghost" id="retry">RIPROVA</button>';
-      el("retry").addEventListener("click", askQuestions);
+    var html = "";
+    if (!active.length) html += '<div class="empty">Nessun progetto attivo.<br>Creane uno col pulsante qui sotto.</div>';
+    html += active.map(projectCard).join("");
+    if (archived.length) {
+      html += '<button class="link archived-toggle" id="arch-toggle">' +
+        (state.showArchived ? "▾" : "▸") + ' ARCHIVIATI (' + archived.length + ')</button>';
+      if (state.showArchived) html += archived.map(projectCard).join("");
     }
+    list.innerHTML = html;
+
+    Array.prototype.forEach.call(list.querySelectorAll(".proj-card"), function (c) {
+      c.addEventListener("click", function () { openProject(c.getAttribute("data-id")); });
+    });
+    var t = el("arch-toggle");
+    if (t) t.addEventListener("click", function () { state.showArchived = !state.showArchived; renderHome(false); });
   }
 
-  function renderQuestion() {
-    var i = create.qi, n = create.questions.length;
-    el("create-step-label").textContent = "DOMANDE";
-    el("create-body").innerHTML =
-      '<div class="qprog">' + (i + 1) + ' DI ' + n + '</div>' +
-      '<p class="qtext">' + escapeHtml(create.questions[i]) + '</p>' +
-      '<textarea id="ans" placeholder="La tua risposta…"></textarea>' +
-      '<button class="btn" id="q-next">' + (i + 1 < n ? "AVANTI" : "CREA IL PIANO") + '</button>';
-    el("ans").value = create.answers[i] || "";
-    el("q-next").addEventListener("click", nextQuestion);
-  }
-
-  function nextQuestion() {
-    create.answers[create.qi] = el("ans").value.trim();
-    if (create.qi + 1 < create.questions.length) { create.qi++; renderQuestion(); }
-    else generate();
-  }
-
-  async function generate() {
-    el("create-step-label").textContent = "GENERO";
-    el("create-body").innerHTML = '<div class="loading">Sto costruendo il piano…</div>';
-    var qa = create.questions.map(function (q, i) { return { q: q, a: create.answers[i] || "" }; });
+  async function newProject() {
+    var title = prompt("Nome del nuovo progetto:");
+    if (title == null) return;
+    title = title.trim(); if (!title) return;
+    var p = { id: Engine.newId("p_"), title: title, description: "", emoji: "📁",
+              color: "#1466c4", status: "doing" };
+    showView("view-project");
+    el("proj-body").innerHTML = '<div class="loading">CREO…</div>';
     try {
-      var r = await API.generatePlan(create.description, qa);
-      openPlan(r.project.id, r);
-    } catch (e) {
-      el("create-body").innerHTML =
-        '<div class="empty">' + escapeHtml(e.message) + '</div>' +
-        '<button class="btn ghost" id="retry2">RIPROVA</button>';
-      el("retry2").addEventListener("click", generate);
-    }
+      var saved = await API.saveProject(p);
+      state.current = saved; state.steps = [];
+      renderProject();
+      el("add-input").focus();
+    } catch (e) { toast(e.message); renderHome(); }
   }
 
-  // ---------- VISTA PIANO ----------
-  async function openPlan(projectId, preloaded) {
-    showView("view-plan");
-    el("plan-body").innerHTML = '<div class="loading">CARICAMENTO…</div>';
+  // ---------- VISTA PROGETTO ----------
+  async function openProject(projectId) {
+    showView("view-project");
+    el("proj-body").innerHTML = '<div class="loading">CARICAMENTO…</div>';
     try {
-      var data = preloaded || await API.getPlan(projectId);
+      var data = await API.getProject(projectId);
       if (!data.project) throw new Error("Progetto non trovato.");
       state.current = data.project; state.steps = data.steps || [];
-      renderPlan();
-    } catch (e) { el("plan-body").innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }
+      renderProject();
+    } catch (e) { el("proj-body").innerHTML = '<div class="empty">' + escapeHtml(e.message) + '</div>'; }
   }
 
-  function renderPlan() {
+  function renderProject() {
     var p = state.current;
     var prog = Engine.computeProgress(state.steps);
-    el("plan-pct").textContent = prog.pct + "%";
+    var hide = getHideDone();
     var tree = Engine.buildTree(state.steps);
 
-    var html = '';
-    html += '<div class="proj-card" style="cursor:default">' +
-      '<div class="proj-emoji">' + (p.emoji || "📈") + '</div>' +
+    var html = '<div class="proj-card head" id="proj-head">' +
+      '<div class="proj-emoji">' + escapeHtml(p.emoji || "📁") + '</div>' +
       '<div class="proj-main"><div class="proj-title">' + escapeHtml(p.title) + '</div>' +
-      '<div class="proj-meta">' + prog.done + ' DI ' + prog.total + ' FATTI · ' + prog.pct + '%</div></div></div>';
+      '<div class="proj-meta">' + (p.status === "archived" ? "ARCHIVIATO · " : "") +
+      prog.done + ' DI ' + prog.total + ' FATTI · ' + prog.pct + '%</div></div></div>';
     html += tacche(prog.pct, 10);
+    if (p.description) html += '<div class="note" id="proj-note">' + escapeHtml(p.description) + '</div>';
 
-    tree.forEach(function (sec, i) {
-      html += '<div class="fase"><div class="quota"><div class="bar"></div>' +
-        '<div class="lab">FASE ' + pad2(i + 1) + '</div><div class="bar"></div></div>' +
-        '<div class="fase-body"><div class="pill">' + escapeHtml(sec.text) + '</div>';
-      sec.children.forEach(function (st) { html += renderStep(st); });
-      html += '</div></div>';
-    });
+    if (!state.steps.length) {
+      html += '<div class="empty">Nessuna cosa da fare.<br>Aggiungila nel campo qui sotto.</div>';
+    } else {
+      var body = tree.map(function (st) { return renderStep(st, hide); }).join("");
+      html += body || '<div class="empty">Tutto fatto! 🎉</div>';
+      if (hide && prog.done) html += '<div class="hint">' + prog.done + ' fatti nascosti</div>';
+    }
 
-    html += '<div class="cartiglio"><div class="code">1B</div>' +
-      '<div class="meta"><div class="t">' + escapeHtml(String(p.title || "").toUpperCase()) + '</div>' +
-      '<div class="s">STEPS · PROGETTO PERSONALE · ' + prog.total + ' STEP</div></div></div>';
-
-    el("plan-body").innerHTML = html;
-    wirePlan();
+    el("proj-body").innerHTML = html;
+    wireProject();
   }
 
-  function renderStep(st) {
-    var kids = st.children && st.children.length;
-    var done = st.done === true || st.done === "true";
+  // Un nodo fatto viene nascosto (con i suoi figli) se "nascondi fatti" è attivo.
+  function renderStep(st, hide) {
+    var done = isDone(st);
+    if (hide && done) return "";
     var html = '<div class="step' + (done ? ' done' : '') + '" data-id="' + escapeHtml(st.id) + '">' +
-      '<div class="grow">' +
       '<div class="chk' + (done ? ' done' : '') + '" data-act="toggle">' + (done ? "✓" : "") + '</div>' +
-      '<div class="step-text" data-act="edit">' + escapeHtml(st.text) + '</div></div>' +
-      '<button class="mini" data-act="decompose">⊕ SCOMPONI</button></div>';
-    if (kids) {
-      html += '<div class="substeps">';
-      st.children.forEach(function (c) { html += renderStep(c); });
-      html += '</div>';
-    }
+      '<div class="step-text" data-act="menu">' + escapeHtml(st.text) + '</div>' +
+      '<button class="mini" data-act="sub" aria-label="Aggiungi sotto-step">＋</button></div>';
+    var kids = (st.children || []).map(function (c) { return renderStep(c, hide); }).join("");
+    if (kids) html += '<div class="substeps">' + kids + '</div>';
     return html;
   }
 
-  function wirePlan() {
-    Array.prototype.forEach.call(el("plan-body").querySelectorAll(".step"), function (row) {
+  function wireProject() {
+    var body = el("proj-body");
+    Array.prototype.forEach.call(body.querySelectorAll(".step"), function (row) {
       var id = row.getAttribute("data-id");
-      row.querySelector('[data-act="toggle"]').addEventListener("click", function (e) { e.stopPropagation(); onToggle(id); });
-      row.querySelector('[data-act="edit"]').addEventListener("click", function (e) { e.stopPropagation(); onEdit(id); });
-      var dec = row.querySelector('[data-act="decompose"]');
-      if (dec) dec.addEventListener("click", function (e) { e.stopPropagation(); onDecompose(id); });
+      row.querySelector('[data-act="toggle"]').addEventListener("click", function () { onToggle(id); });
+      row.querySelector('[data-act="menu"]').addEventListener("click", function () { stepMenu(id); });
+      row.querySelector('[data-act="sub"]').addEventListener("click", function () { onAddSub(id); });
     });
+    el("proj-head").addEventListener("click", projectMenu);
+    var note = el("proj-note");
+    if (note) note.addEventListener("click", editNote);
   }
 
   function findStep(id) { return state.steps.filter(function (s) { return String(s.id) === String(id); })[0]; }
 
+  // ---------- step ----------
+  function addStep(text, parentId) {
+    var p = state.current;
+    var s = { id: Engine.newId("s_"), projectId: p.id, parentId: parentId || "", text: text,
+              order: Engine.nextOrder(state.steps, parentId || ""), done: false, kind: "action" };
+    state.steps.push(s); renderProject();
+    API.saveStep(s).catch(function (e) {
+      state.steps = state.steps.filter(function (x) { return x !== s; });
+      renderProject(); toast(e.message);
+    });
+  }
+
+  function onAdd(ev) {
+    ev.preventDefault();
+    var input = el("add-input");
+    var v = input.value.trim(); if (!v || !state.current) return;
+    input.value = "";
+    addStep(v, "");
+    input.focus();
+  }
+
+  function onAddSub(id) {
+    var s = findStep(id); if (!s) return;
+    var v = prompt("Nuovo sotto-step di “" + s.text + "”:");
+    if (v == null) return;
+    v = v.trim(); if (!v) return;
+    addStep(v, s.id);
+  }
+
   async function onToggle(id) {
     var s = findStep(id); if (!s) return;
-    var next = !(s.done === true || s.done === "true");
-    s.done = next; renderPlan();
-    try { await API.toggleStep(id, next); } catch (e) { s.done = !next; renderPlan(); toast(e.message); }
+    var next = !isDone(s);
+    s.done = next; renderProject();
+    try { await API.toggleStep(id, next); } catch (e) { s.done = !next; renderProject(); toast(e.message); }
+  }
+
+  function stepMenu(id) {
+    var s = findStep(id); if (!s) return;
+    openSheet(s.text, [
+      { label: "✎ MODIFICA TESTO", fn: function () { onEdit(id); } },
+      { label: "＋ AGGIUNGI SOTTO-STEP", fn: function () { onAddSub(id); } },
+      { label: "↑ SPOSTA SU", fn: function () { onMove(id, -1); } },
+      { label: "↓ SPOSTA GIÙ", fn: function () { onMove(id, 1); } },
+      { label: "✕ ELIMINA", danger: true, fn: function () { onDelete(id); } }
+    ]);
   }
 
   function onEdit(id) {
     var s = findStep(id); if (!s) return;
-    var v = prompt("Modifica step:", s.text);
+    var v = prompt("Modifica:", s.text);
     if (v == null) return;
-    v = v.trim(); if (!v) return;
-    var old = s.text; s.text = v; renderPlan();
-    API.saveStep(s).catch(function (e) { s.text = old; renderPlan(); toast(e.message); });
+    v = v.trim(); if (!v || v === s.text) return;
+    var old = s.text; s.text = v; renderProject();
+    API.saveStep(s).catch(function (e) { s.text = old; renderProject(); toast(e.message); });
   }
 
-  async function onDecompose(id) {
+  function onMove(id, dir) {
+    var changed = Engine.moveStep(state.steps, id, dir);
+    if (!changed.length) return;
+    var old = {};
+    changed.forEach(function (c) { var s = findStep(c.id); old[c.id] = s.order; s.order = c.order; });
+    renderProject();
+    API.saveSteps(changed).catch(function (e) {
+      Object.keys(old).forEach(function (k) { findStep(k).order = old[k]; });
+      renderProject(); toast(e.message);
+    });
+  }
+
+  function onDelete(id) {
     var s = findStep(id); if (!s) return;
-    toast("Scompongo…");
-    try {
-      var r = await API.decomposeStep(state.current.id, id, s.text);
-      r.steps.forEach(function (ns) { state.steps.push(ns); });
-      renderPlan();
-    } catch (e) { toast(e.message); }
+    var ids = Engine.descendantIds(state.steps, id);
+    var msg = "Eliminare “" + s.text + "”" + (ids.length > 1 ? " e i suoi " + (ids.length - 1) + " sotto-step" : "") + "?";
+    if (!confirm(msg)) return;
+    var set = {}; ids.forEach(function (x) { set[x] = true; });
+    var before = state.steps;
+    state.steps = state.steps.filter(function (x) { return !set[String(x.id)]; });
+    renderProject();
+    API.deleteStep(id).catch(function (e) { state.steps = before; renderProject(); toast(e.message); });
+  }
+
+  // ---------- progetto ----------
+  // Salva il progetto con le modifiche `patch`; in caso di errore ripristina.
+  function patchProject(patch) {
+    var p = state.current, old = {};
+    Object.keys(patch).forEach(function (k) { old[k] = p[k]; p[k] = patch[k]; });
+    renderProject();
+    return API.saveProject(p).catch(function (e) {
+      Object.keys(old).forEach(function (k) { p[k] = old[k]; });
+      renderProject(); toast(e.message);
+    });
+  }
+
+  function editNote() {
+    var p = state.current;
+    var v = prompt("Nota del progetto (lascia vuoto per toglierla):", p.description || "");
+    if (v == null) return;
+    patchProject({ description: v.trim() });
+  }
+
+  function projectMenu() {
+    var p = state.current; if (!p) return;
+    var hide = getHideDone();
+    var archived = p.status === "archived";
+    openSheet(p.title, [
+      { label: "✎ RINOMINA", fn: function () {
+          var v = prompt("Nome del progetto:", p.title);
+          if (v == null) return; v = v.trim(); if (!v || v === p.title) return;
+          patchProject({ title: v });
+        } },
+      { label: "☺ CAMBIA EMOJI", fn: function () {
+          var v = prompt("Emoji del progetto:", p.emoji || "");
+          if (v == null) return; v = v.trim();
+          patchProject({ emoji: v || "📁" });
+        } },
+      { label: p.description ? "✎ MODIFICA NOTA" : "＋ AGGIUNGI NOTA", fn: editNote },
+      { label: hide ? "◉ MOSTRA I FATTI" : "◎ NASCONDI I FATTI", fn: function () { setHideDone(!hide); renderProject(); } },
+      { label: archived ? "↺ RIATTIVA" : "▣ ARCHIVIA", fn: function () {
+          patchProject({ status: archived ? "doing" : "archived" });
+          toast(archived ? "Progetto riattivato." : "Progetto archiviato.");
+        } },
+      { label: "✕ ELIMINA PROGETTO", danger: true, fn: onDeleteProject }
+    ]);
+  }
+
+  async function onDeleteProject() {
+    var p = state.current;
+    if (!confirm("Eliminare il progetto “" + p.title + "” e tutte le sue cose da fare?")) return;
+    el("proj-body").innerHTML = '<div class="loading">ELIMINO…</div>';
+    try { await API.deleteProject(p.id); state.current = null; renderHome(); }
+    catch (e) { renderProject(); toast(e.message); }
   }
 
   // ---------- wiring globale ----------
-  el("btn-new").addEventListener("click", startCreate);
-  el("create-back").addEventListener("click", renderHome);
-  el("plan-back").addEventListener("click", renderHome);
+  el("btn-new").addEventListener("click", newProject);
+  el("proj-back").addEventListener("click", function () { renderHome(); });
+  el("proj-menu").addEventListener("click", projectMenu);
+  el("add-form").addEventListener("submit", onAdd);
+  el("sheet-bg").addEventListener("click", closeSheet);
 
   renderHome();
 })();
